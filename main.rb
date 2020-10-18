@@ -1,27 +1,52 @@
 require 'gtk3'
 require 'win32ole'
 
-def update_zakaz (connection,liststore,ftext='',status = true) 
-
+def update_order (connection,liststore,zakaz) 
 recordset = WIN32OLE.new('ADODB.Recordset')
+sql = "
+select Заявка_бланки.Наименование, Заявка_бланки.Кол_во, Форматы.Формат,
+Материал.Бумага,
+Переплет,
+Заявка_бланки.Кол_Листов
+from Заявка_бланки,Форматы, Материал
+where Заявка_бланки.№_заказа=#{zakaz}
+and  Заявка_бланки.Формат=Форматы.key
+and Материал.Код=Заявка_бланки.Бумага
+"
+recordset.Open(sql, connection)
+liststore.clear
+return 1 if recordset.EOF
+rows=recordset.GetRows.transpose
+recordset.close
+rows.each { |row|
+iter=liststore.append()
+iter[0]=row[0]
+iter[1]=row[1]
+iter[2]=row[2]
+iter[3]=row[3]
+iter[4]="мягкий" if row[4]==1
+iter[4]="твердый" if row[4]==2
+iter[5]=row[5] if row[5]
+}
+end
 
+
+def update_zakaz (connection,liststore,ftext='',status = true) 
+recordset = WIN32OLE.new('ADODB.Recordset')
 sql = "
 select Заказы.Код, Дата, Заказчики.Сокращенное_название, Счет, Сумма
 from Заказы, Заказчики
 where Заказы.Заказчик=Заказчики.Код 
 and Статус=#{status}
-and Заказчики.Сокращенное_название like '%#{ftext}%'
+and (Заказчики.Сокращенное_название like '%#{ftext}%'
+or Заказы.Код like '%#{ftext}%')
 order by Дата  desc
 "
-
 recordset.Open(sql, connection)
 liststore.clear
 return 1 if recordset.EOF
-
 rows=recordset.GetRows.transpose
 recordset.close
-
-
 rows.each { |row|
 iter=liststore.append()
 iter[0]=row[0]
@@ -29,10 +54,9 @@ iter[1]=row[1].strftime("%d/%m/%y")
 iter[2]=row[2].to_s
 iter[3]=row[3].to_s
 iter[4]=row[4].to_s
-
 }
-
 end
+
 
 
 
@@ -81,12 +105,31 @@ list_paper=Gtk::ListStore.new(String,Integer);
 grid_paper=Gtk::TreeView.new(list_paper)
 grid_paper.override_font(text_f2)
 
-#paper information
-columns_order = ["Paper","Count"]
-list_order=Gtk::ListStore.new(String,Integer);
+#order information
+columns_order = ["Наименование","Кол-во","Формат","Бумага","Переплет","Листов"]
+list_order=Gtk::ListStore.new(String,Integer,String,String,String,Integer);
 grid_order=Gtk::TreeView.new(list_order)
+# grid_order.set_enable_grid_lines(true)
+grid_order.grid_lines=2
+grid_order.columns_autosize
 grid_order.override_font(text_f2)
+columns_order_width = [450,70,80,80,85,60] 
+(0...columns_order.size).each{|i|
+cell=Gtk::CellRendererText.new();
+cell.xalign=0.5 unless i==0
+cell.yalign=0.5
+cell.set_wrap_width 450
+cell.set_wrap_mode :word
 
+cell.set_padding(5, 5)
+col=Gtk::TreeViewColumn.new(columns_order[i],cell,:text=>i);
+
+col.fixed_width = columns_order_width[i]
+col.resizable=true;
+col.set_alignment(1.0)
+col.set_alignment(1.0)
+grid_order.append_column(col);
+}
 
 #scrolwin zakazi
 scrollwindow_zakaz=Gtk::ScrolledWindow.new();
@@ -110,7 +153,12 @@ scrollwindow_order.set_min_content_width(190);
 scrollwindow_order.set_policy('automatic','automatic');
 scrollwindow_order.add(grid_order);
 
-
+grid_zakaz.signal_connect('row-activated') { |treeview,sel_path,column|
+model = treeview.model
+path = sel_path
+iter = model.get_iter(path)
+update_order(connection,list_order,iter[0])
+}
 
 check_status = Gtk::CheckButton.new()
 find = Gtk::Entry.new()
