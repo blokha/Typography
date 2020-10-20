@@ -1,13 +1,15 @@
 require 'gtk3'
 require 'win32ole'
 
-def update_order (connection,liststore,zakaz) 
+def update_order (connection,liststore,liststore2,zakaz) 
 recordset = WIN32OLE.new('ADODB.Recordset')
 sql = "
 select Заявка_бланки.Наименование, Заявка_бланки.Кол_во, Форматы.Формат,
 Материал.Бумага,
 Переплет,
-Заявка_бланки.Кол_Листов
+Заявка_бланки.Кол_Листов,
+Заявка_бланки.Цена,
+Форматы.Делитель
 from Заявка_бланки,Форматы, Материал
 where Заявка_бланки.№_заказа=#{zakaz}
 and  Заявка_бланки.Формат=Форматы.key
@@ -15,6 +17,8 @@ and Материал.Код=Заявка_бланки.Бумага
 "
 recordset.Open(sql, connection)
 liststore.clear
+liststore2.clear
+paper = Hash.new()
 return 1 if recordset.EOF
 rows=recordset.GetRows.transpose
 recordset.close
@@ -26,8 +30,29 @@ iter[2]=row[2]
 iter[3]=row[3]
 iter[4]="мягкий" if row[4]==1
 iter[4]="твердый" if row[4]==2
-iter[5]=row[5] if row[5]
+ if row[5]
+iter[5]=row[5]
+iter[6]=row[1]*row[5]/row[7]
+else
+iter[6]=row[1]/row[7]
+end
+if paper.has_key?(row[3])
+paper[row[3]]+=iter[6] 
+else
+paper[row[3]]=iter[6] 
+end
+if row[6]
+iter[7]=row[6]
+iter[8]=(row[6].sub(",",".").to_f*row[1]).to_s
+end
 }
+
+paper.each_pair{|key,value|
+iter=liststore2.append()
+iter[0]=key
+iter[1]=value
+}
+paper.clear
 end
 
 
@@ -100,25 +125,40 @@ grid_zakaz.append_column(col);
 }
 #paper information
 
-columns_paper = ["Paper","Count"]
+columns_paper = ["Вид бум.","Кол-во А3"]
 list_paper=Gtk::ListStore.new(String,Integer);
 grid_paper=Gtk::TreeView.new(list_paper)
 grid_paper.override_font(text_f2)
+# columns_paper_width = [80,80]
+(0...columns_paper.size).each{|i|
+cell=Gtk::CellRendererText.new();
+cell.xalign=0.5 unless i==0
+cell.yalign=0.5
+# cell.set_wrap_width columns_paper_width[i]
+cell.set_padding(5, 5)
+col=Gtk::TreeViewColumn.new(columns_paper[i],cell,:text=>i);
+# col.fixed_width = columns_order_width[i]
+col.resizable=true;
+col.set_alignment(1.0)
+col.set_alignment(1.0)
+grid_paper.append_column(col);
+}
+
 
 #order information
-columns_order = ["Наименование","Кол-во","Формат","Бумага","Переплет","Листов"]
-list_order=Gtk::ListStore.new(String,Integer,String,String,String,Integer);
+columns_order = ["Наименование","Кол-во","Формат","Вид бум.","Переплет","Листов","Кол-во А3","Цена", "Сумма"]
+list_order=Gtk::ListStore.new(String,Integer,String,String,String,Integer,Integer,String,String);
 grid_order=Gtk::TreeView.new(list_order)
 # grid_order.set_enable_grid_lines(true)
-grid_order.grid_lines=2
+grid_order.grid_lines=3
 grid_order.columns_autosize
 grid_order.override_font(text_f2)
-columns_order_width = [450,70,80,80,85,60] 
+columns_order_width = [365,75,85,85,85,85,85,80,80]
 (0...columns_order.size).each{|i|
 cell=Gtk::CellRendererText.new();
 cell.xalign=0.5 unless i==0
 cell.yalign=0.5
-cell.set_wrap_width 450
+cell.set_wrap_width columns_order_width[i]
 cell.set_wrap_mode :word
 
 cell.set_padding(5, 5)
@@ -157,7 +197,7 @@ grid_zakaz.signal_connect('row-activated') { |treeview,sel_path,column|
 model = treeview.model
 path = sel_path
 iter = model.get_iter(path)
-update_order(connection,list_order,iter[0])
+update_order(connection,list_order,list_paper,iter[0])
 }
 
 check_status = Gtk::CheckButton.new()
