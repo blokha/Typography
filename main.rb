@@ -1,9 +1,11 @@
 require 'gtk3'
 require 'win32ole'
+require 'Prawn'
+require "prawn/measurement_extensions"
 
-def update_order (connection,liststore,liststore2,zakaz) 
-recordset = WIN32OLE.new('ADODB.Recordset')
-sql = "
+def update_order (connection,liststore,liststore2,zakaz)
+  recordset = WIN32OLE.new('ADODB.Recordset')
+  sql = "
 select Заявка_бланки.Наименование, Заявка_бланки.Кол_во, Форматы.Формат,
 Материал.Бумага,
 Переплет,
@@ -15,50 +17,50 @@ where Заявка_бланки.№_заказа=#{zakaz}
 and  Заявка_бланки.Формат=Форматы.key
 and Материал.Код=Заявка_бланки.Бумага
 "
-recordset.Open(sql, connection)
-liststore.clear
-liststore2.clear
-paper = Hash.new()
-return 1 if recordset.EOF
-rows=recordset.GetRows.transpose
-recordset.close
-rows.each { |row|
-iter=liststore.append()
-iter[0]=row[0]
-iter[1]=row[1]
-iter[2]=row[2]
-iter[3]=row[3]
-iter[4]="мягкий" if row[4]==1
-iter[4]="твердый" if row[4]==2
- if row[5]
-iter[5]=row[5]
-iter[6]=row[1]*row[5]/row[7]
+  recordset.Open(sql, connection)
+  liststore.clear
+  liststore2.clear
+  paper = Hash.new()
+  return 1 if recordset.EOF
+  rows=recordset.GetRows.transpose
+  recordset.close
+  rows.each { |row|
+    iter=liststore.append()
+    iter[0]=row[0]
+    iter[1]=row[1]
+    iter[2]=row[2]
+    iter[3]=row[3]
+    iter[4]="мягкий" if row[4]==1
+    iter[4]="твердый" if row[4]==2
+    if row[5]
+      iter[5]=row[5]
+      iter[6]=row[1]*row[5]/row[7]
 else
 iter[6]=row[1]/row[7]
-end
-if paper.has_key?(row[3])
-paper[row[3]]+=iter[6] 
-else
-paper[row[3]]=iter[6] 
-end
-if row[6]
-iter[7]=row[6]
-iter[8]=(row[6].sub(",",".").to_f*row[1]).to_s
-end
-}
+    end
+    if paper.has_key?(row[3])
+      paper[row[3]]+=iter[6]
+    else
+      paper[row[3]]=iter[6]
+    end
+    if row[6]
+      iter[7]=row[6]
+      iter[8]=(row[6].sub(",",".").to_f*row[1]).to_s
+    end
+  }
 
-paper.each_pair{|key,value|
-iter=liststore2.append()
-iter[0]=key
-iter[1]=value
-}
-paper.clear
+  paper.each_pair{|key,value|
+    iter=liststore2.append()
+    iter[0]=key
+    iter[1]=value
+  }
+  paper.clear
 end
 
 
-def update_zakaz (connection,liststore,ftext='',status = true) 
-recordset = WIN32OLE.new('ADODB.Recordset')
-sql = "
+def update_zakaz (connection,liststore,ftext='',status = true)
+  recordset = WIN32OLE.new('ADODB.Recordset')
+  sql = "
 select Заказы.Код, Дата, Заказчики.Сокращенное_название, Счет, Сумма
 from Заказы, Заказчики
 where Заказы.Заказчик=Заказчики.Код 
@@ -67,19 +69,19 @@ and (Заказчики.Сокращенное_название like '%#{ftext}%
 or Заказы.Код like '%#{ftext}%')
 order by Дата  desc
 "
-recordset.Open(sql, connection)
-liststore.clear
-return 1 if recordset.EOF
-rows=recordset.GetRows.transpose
-recordset.close
-rows.each { |row|
-iter=liststore.append()
-iter[0]=row[0]
-iter[1]=row[1].strftime("%d/%m/%y")
-iter[2]=row[2].to_s
-iter[3]=row[3].to_s
-iter[4]=row[4].to_s
-}
+  recordset.Open(sql, connection)
+  liststore.clear
+  return 1 if recordset.EOF
+  rows=recordset.GetRows.transpose
+  recordset.close
+  rows.each { |row|
+    iter=liststore.append()
+    iter[0]=row[0]
+    iter[1]=row[1].strftime("%d/%m/%y")
+    iter[2]=row[2].to_s
+    iter[3]=row[3].to_s
+    iter[4]=row[4].to_s
+  }
 end
 
 
@@ -110,18 +112,18 @@ window.border_width=15
 
 #zakaz
 columns_zakaz = ["№","Дата","Заказчик","Счет","Сумма"]
-columns_zakaz_width = [50,100,300,100,100] 
+columns_zakaz_width = [50,100,300,100,100]
 list_zakaz=Gtk::ListStore.new(Integer,String,String,String,String);
 grid_zakaz=Gtk::TreeView.new(list_zakaz)
 grid_zakaz.override_font(text_f2)
 
 (0...columns_zakaz.size).each{|i|
-cell=Gtk::CellRendererText.new();
-col=Gtk::TreeViewColumn.new(columns_zakaz[i],cell,:text=>i);
-# col.resizable=true;
-col.set_sizing('FIXED')
-col.fixed_width = columns_zakaz_width[i]
-grid_zakaz.append_column(col);
+  cell=Gtk::CellRendererText.new();
+  col=Gtk::TreeViewColumn.new(columns_zakaz[i],cell,:text=>i);
+  # col.resizable=true;
+  col.set_sizing('FIXED')
+  col.fixed_width = columns_zakaz_width[i]
+  grid_zakaz.append_column(col);
 }
 #paper information
 
@@ -131,17 +133,17 @@ grid_paper=Gtk::TreeView.new(list_paper)
 grid_paper.override_font(text_f2)
 # columns_paper_width = [80,80]
 (0...columns_paper.size).each{|i|
-cell=Gtk::CellRendererText.new();
-cell.xalign=0.5 unless i==0
-cell.yalign=0.5
-# cell.set_wrap_width columns_paper_width[i]
-cell.set_padding(5, 5)
-col=Gtk::TreeViewColumn.new(columns_paper[i],cell,:text=>i);
-# col.fixed_width = columns_order_width[i]
-col.resizable=true;
-col.set_alignment(1.0)
-col.set_alignment(1.0)
-grid_paper.append_column(col);
+  cell=Gtk::CellRendererText.new();
+  cell.xalign=0.5 unless i==0
+  cell.yalign=0.5
+  # cell.set_wrap_width columns_paper_width[i]
+  cell.set_padding(5, 5)
+  col=Gtk::TreeViewColumn.new(columns_paper[i],cell,:text=>i);
+  # col.fixed_width = columns_order_width[i]
+  col.resizable=true;
+  col.set_alignment(1.0)
+  col.set_alignment(1.0)
+  grid_paper.append_column(col);
 }
 
 
@@ -155,20 +157,20 @@ grid_order.columns_autosize
 grid_order.override_font(text_f2)
 columns_order_width = [365,75,85,85,85,85,85,80,80]
 (0...columns_order.size).each{|i|
-cell=Gtk::CellRendererText.new();
-cell.xalign=0.5 unless i==0
-cell.yalign=0.5
-cell.set_wrap_width columns_order_width[i]
-cell.set_wrap_mode :word
+  cell=Gtk::CellRendererText.new();
+  cell.xalign=0.5 unless i==0
+  cell.yalign=0.5
+  cell.set_wrap_width columns_order_width[i]
+  cell.set_wrap_mode :word
 
-cell.set_padding(5, 5)
-col=Gtk::TreeViewColumn.new(columns_order[i],cell,:text=>i);
+  cell.set_padding(5, 5)
+  col=Gtk::TreeViewColumn.new(columns_order[i],cell,:text=>i);
 
-col.fixed_width = columns_order_width[i]
-col.resizable=true;
-col.set_alignment(1.0)
-col.set_alignment(1.0)
-grid_order.append_column(col);
+  col.fixed_width = columns_order_width[i]
+  col.resizable=true;
+  col.set_alignment(1.0)
+  col.set_alignment(1.0)
+  grid_order.append_column(col);
 }
 
 #scrolwin zakazi
@@ -193,11 +195,17 @@ scrollwindow_order.set_min_content_width(190);
 scrollwindow_order.set_policy('automatic','automatic');
 scrollwindow_order.add(grid_order);
 
-grid_zakaz.signal_connect('row-activated') { |treeview,sel_path,column|
-model = treeview.model
-path = sel_path
-iter = model.get_iter(path)
-update_order(connection,list_order,list_paper,iter[0])
+# grid_zakaz.signal_connect('row-activated') { |treeview,sel_path,column|
+#   model = treeview.model
+#   path = sel_path
+#   iter = model.get_iter(path)
+#   update_order(connection,list_order,list_paper,iter[0])
+# }
+
+select1=grid_zakaz.selection
+select1.signal_connect("changed"){|treeselection|
+# list_order.clear
+update_order(connection,list_order,list_paper,list_zakaz.get_value(treeselection.selected,0))
 }
 
 check_status = Gtk::CheckButton.new()
@@ -206,12 +214,12 @@ find = Gtk::Entry.new()
 check_status.set_label('В работе')
 check_status.set_active(true)
 check_status.signal_connect("toggled"){
-	update_zakaz(connection,list_zakaz,find.text,check_status.active?)
+  update_zakaz(connection,list_zakaz,find.text,check_status.active?)
 }
 
 find = Gtk::Entry.new()
 find.signal_connect("activate"){
-	update_zakaz(connection,list_zakaz,find.text,check_status.active?)
+  update_zakaz(connection,list_zakaz,find.text,check_status.active?)
 }
 
 button_new = Gtk::Button.new(:label => 'New')
@@ -229,7 +237,68 @@ hbox1.pack_end(button_del)
 button_print_zakaz = Gtk::Button.new(:label => 'Zakaz')
 button_print_stickers = Gtk::Button.new(:label => 'Stickers')
 button_print_order = Gtk::Button.new(:label => 'Order')
+button_print_stickers.signal_connect("clicked"){
 
+
+
+  path = 'C:\Program Files\Tracker Software\PDF Editor\PDFXEdit.exe'
+  pdf = Prawn::Document.new(:page_size => "A4",:margin => 0.mm)
+  pdf.font_size 14
+  pdf.font_families.update(
+    "Comic" => {
+      :normal      => { :file => 'COMIC.TTF', :font => "Comic" },
+      :italic      => { :file => 'COMICI.TTF', :font => "Comic-Italic" },
+      :bold        => { :file => 'COMICBD.TTF', :font => "Comic-Bold" },
+      :bold_italic => { :file => 'COMICZ.TTF', :font => "Comic-BoldItalic" }
+    }
+  )
+  pdf.font "Comic"
+  text_x=10.mm
+  text_y=297.mm
+  i=1
+  select1=grid_zakaz.selection
+  iter=select1.selected
+  post_text=list_zakaz.get_value(iter,2)
+  schet_text="Счет №"+list_zakaz.get_value(iter,3).to_s if list_zakaz.get_value(iter,3).to_i>0
+  info_text="(056) 785-08-90"
+
+  list_order.each { |model, path, row|
+    blank_text=row[0]
+    count_text=row[1]
+    pdf.formatted_text_box [
+      {:text=>"Получатель \n", :styles => [:bold]},
+      {:text =>"#{post_text}\n" },
+      {:text=>"Наименование\n", :styles => [:bold]},
+      {:text =>"#{blank_text}\n" },
+      {:text=>"Кол-во\n", :styles => [:bold]},
+      {:text =>"#{count_text}\n" },
+      {:text =>"#{info_text}\n" },
+      {:text=>"#{schet_text}\n"},
+    ] ,
+    :at => [text_x,text_y],
+    :width => 85.mm,
+    :height => 99.mm,
+    :align => :center,
+    :valign => :center,
+    :overflow => :shrink_to_fit
+
+    i=i+1
+    text_x=115.mm
+
+    if (i.odd?)
+      text_x=0.mm
+      text_y=text_y-99.mm
+    end
+    if i==7
+      i=1
+      text_x=10.mm
+      text_y=297.mm
+      pdf.start_new_page
+    end
+  }
+  pdf.render_file "Stickers.pdf"
+  Process.spawn(path,"Stickers.pdf")
+}
 
 hbox2 = Gtk::Box.new('horizontal', 15)
 hbox2.pack_end(button_print_zakaz)
