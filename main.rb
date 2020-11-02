@@ -92,7 +92,7 @@ Gtk.init
 
 connection = WIN32OLE.new('ADODB.Connection')
 # connection.Open('Provider=Microsoft.Jet.OLEDB.4.0;Data Source=1.mdb')
-connection.Open('Provider=Microsoft.ACE.OLEDB.12.0;Data Source=1.mdb')
+connection.Open('Provider=Microsoft.ACE.OLEDB.12.0;Data Source=Изготовление продукции.mdb')
 
 
 text_f1=Pango::FontDescription.new("Normal bold 12")
@@ -237,11 +237,9 @@ hbox1.pack_end(button_del)
 button_print_zakaz = Gtk::Button.new(:label => 'Zakaz')
 button_print_stickers = Gtk::Button.new(:label => 'Stickers')
 button_print_order = Gtk::Button.new(:label => 'Order')
+#Print stickers
 button_print_stickers.signal_connect("clicked"){
-
-
-
-  path = 'C:\Program Files\Tracker Software\PDF Editor\PDFXEdit.exe'
+  path_pdf = 'C:\Program Files\Tracker Software\PDF Editor\PDFXEdit.exe'
   pdf = Prawn::Document.new(:page_size => "A4",:margin => 0.mm)
   pdf.font_size 14
   pdf.font_families.update(
@@ -261,8 +259,37 @@ button_print_stickers.signal_connect("clicked"){
   post_text=list_zakaz.get_value(iter,2)
   schet_text="Счет №"+list_zakaz.get_value(iter,3).to_s if list_zakaz.get_value(iter,3).to_i>0
   info_text="(056) 785-08-90"
-
+  rows_my = Array.new() {Array.new(2)}
+  dialog = Gtk::MessageDialog.new(
+                            :parent => window,
+                            :type => :question,
+                            :buttons => Gtk::ButtonsType::YES_NO)
+  dialog.set_title "HI"
+  dialog.set_halign(1)
+  dialog.set_valign(1)
   list_order.each { |model, path, row|
+    if row[6]>1000
+  dialog.markup = "<span size='14'> Разбить продукция \n<b>#{row[0]}</b> \nв количестве #{row[1]}</span>?"
+    if dialog.run == :yes
+      m = row[6].to_i / 1000
+      if (row[6].to_i % 1000)>0 then m=m+1 end
+      count = row[1].to_i / m
+      (1..m).each {
+        rows_my.push [row[0],count]
+      }
+      count = row[1].to_i - (m-1)*count
+      rows_my.push [row[0],count] if count>0
+      next
+    else
+      print "No\n"
+    end
+  end
+
+    rows_my.push [row[0],row[1]]
+  }
+  dialog.destroy
+
+    rows_my.each{ |row|
     blank_text=row[0]
     count_text=row[1]
     pdf.formatted_text_box [
@@ -297,7 +324,7 @@ button_print_stickers.signal_connect("clicked"){
     end
   }
   pdf.render_file "Stickers.pdf"
-  Process.spawn(path,"Stickers.pdf")
+  Process.spawn(path_pdf,"Stickers.pdf")
 }
 
 hbox2 = Gtk::Box.new('horizontal', 15)
